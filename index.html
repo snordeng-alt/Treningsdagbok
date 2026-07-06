@@ -190,6 +190,43 @@
     .current-weight { font-size: 54px; }
     .tab-btn { font-size: 11px; padding: 7px 4px; }
   }
+
+  /* TIMER */
+  .timer-overlay {
+    position: fixed; inset: 0; background: rgba(10,12,20,0.92);
+    z-index: 500; display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 16px;
+    opacity: 0; pointer-events: none; transition: opacity 0.3s;
+  }
+  .timer-overlay.active { opacity: 1; pointer-events: all; }
+  .timer-circle {
+    width: 200px; height: 200px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    position: relative; background: var(--surface2);
+  }
+  .timer-ring {
+    position: absolute; inset: 0; border-radius: 50%;
+    background: conic-gradient(var(--accent2) var(--prog, 0%), var(--surface2) 0%);
+  }
+  .timer-inner {
+    width: 168px; height: 168px; border-radius: 50%;
+    background: var(--bg); display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 4px;
+    position: relative; z-index: 1;
+  }
+  .timer-seconds {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 64px; font-weight: 800; color: var(--text); line-height: 1;
+  }
+  .timer-label { font-size: 12px; color: var(--text3); font-weight: 500; }
+  .timer-exercise { font-size: 14px; color: var(--text2); font-weight: 600; text-align: center; max-width: 260px; }
+  .timer-next { font-size: 12px; color: var(--text3); }
+  .timer-skip {
+    background: transparent; border: 1px solid var(--border); color: var(--text3);
+    font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500;
+    padding: 10px 24px; border-radius: 100px; cursor: pointer; transition: all 0.2s;
+  }
+  .timer-skip:hover { border-color: var(--text2); color: var(--text); }
 </style>
 </head>
 <body>
@@ -209,6 +246,15 @@
 </header>
 
 <main>
+  <!-- RESUME BANNER -->
+  <div id="resumeBanner" style="display:none;background:rgba(247,201,79,0.08);border:1px solid rgba(247,201,79,0.3);border-radius:12px;padding:14px 16px;margin-bottom:14px;position:relative">
+    <div style="font-size:13px;font-weight:600;color:var(--gold);margin-bottom:4px">⚡ Du har en påbegynt økt</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:10px" id="resumeInfo"></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary btn-sm" onclick="resumeDraft()">Fortsett økten</button>
+      <button class="btn btn-danger" onclick="discardDraft()">Forkast</button>
+    </div>
+  </div>
 
   <!-- ===== VEKT TAB ===== -->
   <div id="tab-vekt" class="tab-panel active">
@@ -328,11 +374,14 @@
       <div class="exercise-list" id="exerciseList"></div>
       <div class="card">
         <div class="card-title">Notat</div>
-        <textarea id="workoutNote" placeholder="Hvordan føltes økten? Form, energi, noe å jobbe med?"></textarea>
+        <textarea id="workoutNote" oninput="saveDraft()" placeholder="Hvordan føltes økten? Form, energi, noe å jobbe med?"></textarea>
+      </div>
+      <div id="draftBanner" style="display:none;background:rgba(247,201,79,0.08);border:1px solid rgba(247,201,79,0.25);border-radius:10px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:var(--gold)">
+        💾 Økt mellomlagret automatisk
       </div>
       <div class="workout-actions">
-        <button class="btn btn-success" onclick="saveWorkout()">💾 Lagre økt</button>
-        <button class="btn btn-danger" onclick="resetWorkout()">Avbryt</button>
+        <button class="btn btn-success" onclick="saveWorkout()">✅ Avslutt og lagre økt</button>
+        <button class="btn btn-danger" onclick="confirmAbort()">Avbryt</button>
       </div>
     </div>
   </div>
@@ -389,7 +438,7 @@ const SESSIONS = {
       { name: 'Knebøy',         bigLift: true,  sets: 3, defaultReps: 8,  defaultKg: 20,  unit: 'reps' },
       { name: 'Benkpress',      bigLift: true,  sets: 3, defaultReps: 8,  defaultKg: 20,  unit: 'reps' },
       { name: 'Beinpress',      bigLift: false, sets: 3, defaultReps: 12, defaultKg: 60,  unit: 'reps' },
-      { name: 'Brystfly',       bigLift: false, sets: 3, defaultReps: 12, defaultKg: 10,  unit: 'reps' },
+      { name: 'Chest press maskin', bigLift: false, sets: 3, defaultReps: 12, defaultKg: 30,  unit: 'reps' },
       { name: 'Skulderpress',   bigLift: false, sets: 3, defaultReps: 12, defaultKg: 30,  unit: 'reps' },
       { name: 'Triceps pushdown', bigLift: false, sets: 3, defaultReps: 15, defaultKg: 20, unit: 'reps' }
     ]
@@ -521,6 +570,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('weightDate').value = today;
   document.getElementById('workoutDate').value = today;
   loadAllData();
+  checkForDraft();
 });
 
 // ============================================================
@@ -620,6 +670,22 @@ function drawWeightChart(data) {
 // WORKOUT LOGGING
 // ============================================================
 function selectSession(key) {
+  // If there's an active draft for a DIFFERENT session, warn before switching
+  if (selectedSession && selectedSession !== key) {
+    const draft = loadDraft();
+    if (draft && draft.session === selectedSession) {
+      if (!confirm('Du har en påbegynt ' + SESSIONS[selectedSession].name + '-økt som ikke er lagret. Vil du forkaste den og bytte økt?')) {
+        // Re-select the current session card visually
+        document.querySelectorAll('.session-card').forEach(c => c.classList.remove('selected'));
+        document.getElementById('sess-' + selectedSession).classList.add('selected');
+        return;
+      }
+      // User confirmed – discard old draft
+      localStorage.removeItem(DRAFT_KEY);
+      document.getElementById('draftBanner').style.display = 'none';
+    }
+  }
+
   selectedSession = key;
   document.querySelectorAll('.session-card').forEach(c => c.classList.remove('selected'));
   document.getElementById('sess-' + key).classList.add('selected');
@@ -628,6 +694,13 @@ function selectSession(key) {
   document.getElementById('exerciseSectionTitle').textContent = session.name;
   document.getElementById('exerciseSection').style.display = 'block';
   renderExercises(key);
+
+  // Check if there's a saved draft for THIS session and restore it
+  const draft = loadDraft();
+  if (draft && draft.session === key) {
+    restoreDraftValues(draft);
+  }
+
   document.getElementById('exerciseSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -709,11 +782,38 @@ function renderExercises(key) {
 
 function checkSetDone(ei, si) {}
 
+// Select all text on focus for number inputs
+document.addEventListener('focusin', function(e) {
+  if (e.target && (e.target.classList.contains('set-weight-input') || 
+      e.target.classList.contains('set-reps-input') || 
+      e.target.classList.contains('set-input'))) {
+    e.target.select();
+  }
+});
+
 function markSetDone(ei, si) {
   const checked = document.getElementById(`done-${ei}-${si}`).checked;
   const row = document.getElementById(`row-${ei}-${si}`);
-  if (checked) row.classList.add('completed');
-  else row.classList.remove('completed');
+  if (checked) {
+    row.classList.add('completed');
+    saveDraft();
+    // Find exercise info for timer
+    if (selectedSession && SESSIONS[selectedSession]) {
+      const session = SESSIONS[selectedSession];
+      const ex = session.exercises[ei];
+      if (ex) {
+        const isBigLift = ex.bigLift || false;
+        const isKB = session.type === 'kb';
+        startRestTimer(ex.name, isBigLift, isKB);
+      }
+    }
+  } else {
+    row.classList.remove('completed');
+    // Cancel timer if unchecking
+    if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+    document.getElementById('timerOverlay').classList.remove('active');
+    document.getElementById('timerRing').style.cssText = '';
+  }
 }
 
 function saveWorkout() {
@@ -743,6 +843,8 @@ function saveWorkout() {
   renderStreakBar();
   renderPRs();
   resetWorkout();
+  localStorage.removeItem(DRAFT_KEY);
+  document.getElementById('draftBanner').style.display = 'none';
   showToast('💪 ' + session.name + ' lagret!');
 }
 
@@ -997,6 +1099,211 @@ function showToast(msg) {
   t.textContent = msg; t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2500);
 }
+
+// ============================================================
+// REST TIMER
+// ============================================================
+let timerInterval = null;
+let timerTotal = 0;
+let timerRemaining = 0;
+
+const REST_TIMES = { bigLift: 180, gym: 90, kb: 60 };
+
+function playBeep(freq, duration, vol) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.frequency.value = freq; osc.type = 'sine';
+    gain.gain.setValueAtTime(vol, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+    osc.start(ctx.currentTime); osc.stop(ctx.currentTime + duration);
+  } catch(e) {}
+}
+
+function playDoneSound() {
+  playBeep(660, 0.12, 0.3);
+  setTimeout(() => playBeep(770, 0.12, 0.3), 160);
+  setTimeout(() => playBeep(880, 0.22, 0.45), 320);
+}
+
+function startRestTimer(exName, isBigLift, isKB) {
+  const duration = isBigLift ? REST_TIMES.bigLift : isKB ? REST_TIMES.kb : REST_TIMES.gym;
+  timerTotal = duration; timerRemaining = duration;
+  const overlay = document.getElementById('timerOverlay');
+  const secEl = document.getElementById('timerSeconds');
+  const exEl = document.getElementById('timerExercise');
+  const nextEl = document.getElementById('timerNext');
+  const ring = document.getElementById('timerRing');
+  exEl.textContent = exName;
+  nextEl.textContent = isBigLift ? '3 min hvile – basisløft' : isKB ? '60 sek hvile' : '90 sek hvile';
+  secEl.textContent = timerRemaining;
+  ring.style.background = 'conic-gradient(var(--accent2) 0%, var(--surface2) 0%)';
+  overlay.classList.add('active');
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    timerRemaining--;
+    const pct = ((timerTotal - timerRemaining) / timerTotal) * 100;
+    ring.style.background = 'conic-gradient(var(--accent2) ' + pct + '%, var(--surface2) 0%)';
+    if (timerRemaining <= 0) {
+      clearInterval(timerInterval); timerInterval = null;
+      secEl.textContent = '0';
+      playDoneSound();
+      setTimeout(() => { overlay.classList.remove('active'); }, 1000);
+    } else {
+      secEl.textContent = timerRemaining;
+      if (timerRemaining === 3) playBeep(440, 0.1, 0.2);
+    }
+  }, 1000);
+}
+
+function skipTimer() {
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+  document.getElementById('timerOverlay').classList.remove('active');
+}
+
+
+// ============================================================
+// DRAFT / AUTO-SAVE
+// ============================================================
+const DRAFT_KEY = 'treningslogg_draft';
+
+function saveDraft() {
+  if (!selectedSession) return;
+  const session = SESSIONS[selectedSession];
+  const isGym = session.type === 'gym';
+  const date = document.getElementById('workoutDate').value;
+  const note = document.getElementById('workoutNote').value;
+
+  const exerciseState = session.exercises.map((ex, ei) => {
+    if (isGym) {
+      return {
+        sets: Array.from({length: ex.sets}, (_, si) => ({
+          kg: document.getElementById('kg-' + ei + '-' + si)?.value || ex.defaultKg,
+          reps: document.getElementById('reps-' + ei + '-' + si)?.value || ex.defaultReps,
+          done: document.getElementById('done-' + ei + '-' + si)?.checked || false
+        }))
+      };
+    } else {
+      return {
+        sets: Array.from({length: ex.sets}, (_, si) =>
+          document.getElementById('ex' + ei + '_set' + si)?.value || ex.defaultReps
+        )
+      };
+    }
+  });
+
+  const draft = { session: selectedSession, date, note, exerciseState, savedAt: new Date().toISOString() };
+  localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+
+  const banner = document.getElementById('draftBanner');
+  if (banner) {
+    banner.style.display = 'block';
+    banner.style.opacity = '1';
+    setTimeout(() => { banner.style.opacity = '0.5'; }, 1500);
+  }
+}
+
+function loadDraft() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch(e) { return null; }
+}
+
+function checkForDraft() {
+  const draft = loadDraft();
+  if (!draft || !SESSIONS[draft.session]) {
+    document.getElementById('resumeBanner').style.display = 'none';
+    return;
+  }
+  const session = SESSIONS[draft.session];
+  const savedAt = new Date(draft.savedAt);
+  const timeStr = savedAt.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' });
+  document.getElementById('resumeInfo').textContent = session.name + ' · lagret ' + timeStr;
+  document.getElementById('resumeBanner').style.display = 'block';
+}
+
+function restoreDraftValues(draft) {
+  const session = SESSIONS[draft.session];
+  if (!session) return;
+  setTimeout(() => {
+    const isGym = session.type === 'gym';
+    draft.exerciseState.forEach((exState, ei) => {
+      if (isGym) {
+        exState.sets.forEach((s, si) => {
+          const kgEl = document.getElementById('kg-' + ei + '-' + si);
+          const repsEl = document.getElementById('reps-' + ei + '-' + si);
+          const doneEl = document.getElementById('done-' + ei + '-' + si);
+          const row = document.getElementById('row-' + ei + '-' + si);
+          if (kgEl) kgEl.value = s.kg;
+          if (repsEl) repsEl.value = s.reps;
+          if (doneEl && s.done) {
+            doneEl.checked = true;
+            if (row) row.classList.add('completed');
+          }
+        });
+      } else {
+        exState.sets.forEach((val, si) => {
+          const el = document.getElementById('ex' + ei + '_set' + si);
+          if (el) el.value = val;
+        });
+      }
+    });
+    if (draft.note) document.getElementById('workoutNote').value = draft.note;
+    document.getElementById('draftBanner').style.display = 'block';
+  }, 100);
+}
+
+function resumeDraft() {
+  const draft = loadDraft();
+  if (!draft || !SESSIONS[draft.session]) return;
+  document.getElementById('resumeBanner').style.display = 'none';
+
+  // Switch to correct program tab
+  const session = SESSIONS[draft.session];
+  const progBtn = session.type === 'gym'
+    ? document.getElementById('prog-gym')
+    : document.getElementById('prog-kb');
+  switchProgram(session.type, progBtn);
+
+  // Set date and select session (renders exercises)
+  document.getElementById('workoutDate').value = draft.date;
+  selectedSession = null; // allow selectSession to proceed without warning
+  selectSession(draft.session);
+}
+
+function discardDraft() {
+  localStorage.removeItem(DRAFT_KEY);
+  document.getElementById('resumeBanner').style.display = 'none';
+  showToast('Økt forkastet');
+}
+
+function confirmAbort() {
+  if (confirm('Vil du avbryte økten? Mellomlagret data slettes.')) {
+    localStorage.removeItem(DRAFT_KEY);
+    resetWorkout();
+    document.getElementById('draftBanner').style.display = 'none';
+  }
+}
+
 </script>
+
+<!-- TIMER OVERLAY -->
+<div class="timer-overlay" id="timerOverlay">
+  <div class="timer-exercise" id="timerExercise">Hviler...</div>
+  <div class="timer-circle">
+    <div class="timer-ring" id="timerRing"></div>
+    <div class="timer-inner">
+      <div class="timer-seconds" id="timerSeconds">90</div>
+      <div class="timer-label">sekunder</div>
+    </div>
+  </div>
+  <div class="timer-next" id="timerNext"></div>
+  <button class="timer-skip" onclick="skipTimer()">Hopp over hvile ›</button>
+</div>
+
 </body>
 </html>
