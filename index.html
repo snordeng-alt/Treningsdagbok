@@ -287,6 +287,32 @@ canvas{width:100%!important;}
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--green);color:#0c0e14;font-weight:700;font-size:13px;padding:11px 22px;border-radius:100px;z-index:999;transition:transform .3s cubic-bezier(.34,1.56,.64,1);white-space:nowrap;pointer-events:none;}
 .toast.show{transform:translateX(-50%) translateY(0);}
 
+/* ── PROGRAM BUILDER ── */
+.prog-builder-card{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);margin-bottom:12px;overflow:hidden;}
+.prog-builder-hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;cursor:pointer;user-select:none;}
+.prog-builder-hdr span{font-size:13px;font-weight:700;color:var(--blue);}
+.prog-builder-body{padding:14px;border-top:1px solid var(--border);}
+.custom-prog-list{display:flex;flex-direction:column;gap:8px;margin-bottom:10px;}
+.custom-prog-item{background:var(--bg);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 12px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;transition:all .2s;}
+.custom-prog-item:hover{border-color:var(--blue);}
+.custom-prog-item.sel{border-color:var(--blue);background:rgba(79,142,247,.06);}
+.cpi-name{font-size:13px;font-weight:600;}
+.cpi-meta{font-size:11px;color:var(--t3);margin-top:2px;}
+.cpi-actions{display:flex;gap:6px;}
+.day-builder{background:var(--bg);border:1px solid var(--border);border-radius:var(--r-sm);padding:12px;margin-bottom:8px;}
+.day-builder-hdr{font-size:12px;font-weight:700;color:var(--text);margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;}
+.ex-chip{display:inline-flex;align-items:center;gap:6px;background:var(--s2);border:1px solid var(--border2);border-radius:20px;padding:4px 10px;margin:3px;font-size:12px;cursor:pointer;}
+.ex-chip .remove{color:var(--t3);font-size:14px;line-height:1;}
+.ex-chip:hover .remove{color:var(--red);}
+.lib-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;max-height:300px;overflow-y:auto;margin-top:8px;}
+.lib-item{background:var(--bg);border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 10px;cursor:pointer;transition:all .15s;font-size:12px;}
+.lib-item:hover{border-color:var(--blue);color:var(--blue);}
+.lib-item .li-group{font-size:10px;color:var(--t3);margin-top:1px;}
+.step-label{font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.8px;margin:12px 0 6px;}
+.sets-picker{display:flex;gap:6px;flex-wrap:wrap;}
+.sets-pill{padding:6px 14px;border:1px solid var(--border);border-radius:20px;background:transparent;color:var(--t3);font-size:13px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;}
+.sets-pill.sel{border-color:var(--blue);color:var(--blue);background:rgba(79,142,247,.08);}
+
 /* ── UTILS ── */
 .divider{height:1px;background:var(--border);margin:12px 0;}
 .section-lbl{font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:1px;margin:14px 0 8px;}
@@ -387,6 +413,37 @@ canvas{width:100%!important;}
     </div></div>
     <div class="row" style="margin-top:10px">
       <div class="ig"><label>Dato</label><input type="date" id="wktDate"></div>
+    </div>
+  </div>
+
+  <!-- Custom Programs -->
+  <div class="prog-builder-card" id="customProgCard">
+    <div class="prog-builder-hdr" onclick="toggleProgBuilder()">
+      <span>🗂 Mine egne programmer</span><span id="progBuilderArrow">▼</span>
+    </div>
+    <div class="prog-builder-body" id="progBuilderBody" style="display:none">
+      <div class="custom-prog-list" id="customProgList"></div>
+      <button class="btn btn-ghost btn-sm btn-full" onclick="startNewProg()">+ Bygg nytt program</button>
+    </div>
+  </div>
+
+  <!-- Program builder wizard -->
+  <div id="progWizard" style="display:none">
+    <div class="card">
+      <div class="card-title inline">Bygg program <button class="btn-icon" onclick="closeWizard()" style="font-size:13px;color:var(--t3)">✕ Avbryt</button></div>
+      <div class="step-label">Navn på programmet</div>
+      <input type="text" id="wizProgName" placeholder="F.eks. Push/Pull/Legs, 4-dagers..." style="margin-bottom:10px">
+      <div class="step-label">Antall treningsdager per uke</div>
+      <div class="sets-picker" id="dayCountPicker">
+        <button class="sets-pill" onclick="setDayCount(2)">2</button>
+        <button class="sets-pill" onclick="setDayCount(3)">3</button>
+        <button class="sets-pill" onclick="setDayCount(4)">4</button>
+        <button class="sets-pill" onclick="setDayCount(5)">5</button>
+      </div>
+      <div id="wizDaysContainer" style="margin-top:14px"></div>
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button class="btn btn-green btn-full" onclick="saveCustomProg()">💾 Lagre program</button>
+      </div>
     </div>
   </div>
 
@@ -1018,18 +1075,24 @@ function buildCoreCard(ex,ei){
 function buildGymSets(ex,ei,isCore){
   const prefix=isCore?`c${ei}`:`e${ei}`;
   const last=getLastPerf(ex.name);
-  const prevKg=last&&last.sets&&last.sets[0]&&typeof last.sets[0]==='object'?last.sets[0].kg:ex.defaultKg;
-  const prevReps=last&&last.sets&&last.sets[0]&&typeof last.sets[0]==='object'?last.sets[0].reps:ex.defaultReps;
+  const lastSets=(last&&last.sets&&typeof last.sets[0]==='object')?last.sets:null;
+  const numSets=ex.sets||3;
   return `<div class="sets-wrap"><table class="sets-tbl">
     <thead><tr><th class="tl">Sett</th><th>Kg</th><th></th><th>Reps</th><th>✓</th></tr></thead>
-    <tbody>${Array.from({length:ex.sets||3},(_,si)=>`
-      <tr id="row-${prefix}-${si}">
-        <td class="sn">S${si+1}</td>
+    <tbody>${Array.from({length:numSets},(_,si)=>{
+      // Per-set: use last session's value for this set index, fall back to set 0, then default
+      const lastSet=lastSets?(lastSets[si]||lastSets[0]):null;
+      const prevKg=lastSet?lastSet.kg:ex.defaultKg;
+      const prevReps=lastSet?lastSet.reps:ex.defaultReps;
+      const lastLabel=lastSet?`<span style="font-size:9px;color:var(--t3);display:block;margin-top:1px">${lastSet.kg}×${lastSet.reps}</span>`:'';
+      return `<tr id="row-${prefix}-${si}">
+        <td class="sn">S${si+1}${lastLabel}</td>
         <td><input type="number" class="set-kg" id="kg-${prefix}-${si}" value="${prevKg}" min="0" max="500" step="2.5" onchange="saveDraft();updateVolBadge()"></td>
         <td class="su">kg</td>
         <td><input type="number" class="set-reps" id="reps-${prefix}-${si}" value="${prevReps}" min="0" max="200" onchange="saveDraft();updateVolBadge()"></td>
         <td class="set-cb"><input type="checkbox" id="done-${prefix}-${si}" onchange="markDone('${prefix}',${si},${ex.bigLift||false},false)"></td>
-      </tr>`).join('')}
+      </tr>`;
+    }).join('')}
     </tbody></table></div>`;
 }
 
@@ -1107,20 +1170,57 @@ function closeSwap(){
   document.getElementById('swapSheet').classList.remove('open');
 }
 
+function snapshotSets(){
+  const snap={};
+  activeExercises.forEach((ex,ei)=>{
+    const key='e'+ei;
+    const numSets=ex.sets||3;
+    snap[key]={kg:[],reps:[],done:[]};
+    for(let si=0;si<numSets;si++){
+      snap[key].kg.push(document.getElementById('kg-'+key+'-'+si)?.value??'');
+      snap[key].reps.push(document.getElementById('reps-'+key+'-'+si)?.value??'');
+      snap[key].done.push(document.getElementById('done-'+key+'-'+si)?.checked??false);
+    }
+  });
+  return snap;
+}
+
+function restoreSnap(snap, skipEi){
+  Object.entries(snap).forEach(([key,s])=>{
+    const ei=parseInt(key.slice(1));
+    if(ei===skipEi) return;
+    s.kg.forEach((v,si)=>{
+      const kgEl=document.getElementById('kg-'+key+'-'+si);
+      const rpEl=document.getElementById('reps-'+key+'-'+si);
+      const dnEl=document.getElementById('done-'+key+'-'+si);
+      const row=document.getElementById('row-'+key+'-'+si);
+      if(kgEl) kgEl.value=v;
+      if(rpEl) rpEl.value=s.reps[si];
+      if(dnEl && s.done[si]){
+        dnEl.checked=true;
+        if(row) row.classList.add('done');
+      }
+    });
+  });
+}
+
 function doSwap(optIdx){
   const {ei,isCore}=swapTarget;
-  if(isCore){
-    // re-render just that core card with new exercise
-    // We keep CORE_EXERCISES fixed but track selection separately (simple: rebuild that card)
-    closeSwap();showToast('Kjerneutveksling kommer snart');return;
-  }
+  if(isCore){closeSwap();showToast('Kjernebytting kommer snart');return;}
+  // 1. Snapshot all current field values BEFORE touching the DOM
+  const snap=snapshotSets();
+  // 2. Update the exercise data
   const ex=activeExercises[ei];
   const lib=LIBRARY[ex.libKey];
   const opt=lib.options[optIdx];
   activeExercises[ei]={...ex,optIdx,name:opt.name,defaultKg:opt.defaultKg,defaultReps:opt.defaultReps};
   closeSwap();
+  // 3. Re-render all exercise cards
   renderExercises();
+  // 4. Restore all values except the swapped card (it gets fresh last-perf values)
+  restoreSnap(snap, ei);
   saveDraft();
+  updateVolBadge();
   showToast('✅ Byttet til '+opt.name);
 }
 
@@ -1148,8 +1248,16 @@ function markDone(prefix,si,isBigLift,isKB){
 // ════════════════════════════════════════════════════════════
 function saveWorkout(){
   if(!selectedSess){showToast('Velg en økt først');return;}
-  const sess=DEFAULT_SESSIONS[selectedSess];
-  const isGym=sess.type==='gym';
+  // Handle custom sessions
+  const isCustom=selectedSess.startsWith('CUST_');
+  let sessName='Egendefinert økt';
+  if(isCustom){
+    const[,pi,di]=selectedSess.split('_');
+    const prog=customProgs[parseInt(pi)];
+    if(prog){sessName=prog.name+' – '+(prog.days[parseInt(di)]?.name||'Dag '+(parseInt(di)+1));}
+  }
+  const sess=isCustom?{name:sessName,type:'gym'}:DEFAULT_SESSIONS[selectedSess];
+  const isGym=isCustom||sess.type==='gym';
   const date=document.getElementById('wktDate').value;
   const note=document.getElementById('wktNote').value.trim();
 
@@ -1191,7 +1299,7 @@ function saveWorkout(){
     });
   }
 
-  const log={date,session:selectedSess,sessionName:sess.name,type:sess.type,exercises:[...exercises,...coreExercises],note,volume:Math.round(totalVol)};
+  const log={date,session:selectedSess,sessionName:isCustom?sessName:sess.name,type:isCustom?'gym':sess.type,exercises:[...exercises,...coreExercises],note,volume:Math.round(totalVol)};
   workoutLogs.unshift(log);
   saveWorkoutsSheets();
   localStorage.removeItem(DRAFT_KEY);
@@ -1669,6 +1777,234 @@ function showToast(msg){
   t.textContent=msg;t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'),2500);
 }
+
+// ════════════════════════════════════════════════════════════
+// CUSTOM PROGRAM BUILDER
+// ════════════════════════════════════════════════════════════
+const CUSTOM_PROGS_KEY='tdagbok_custom_progs';
+let customProgs=JSON.parse(localStorage.getItem(CUSTOM_PROGS_KEY)||'[]');
+let wizDayCount=3;
+let wizDayExercises={}; // {dayIdx: [{libKey, optIdx, sets}]}
+let editingProgIdx=null;
+
+function saveCustomProgsLocal(){
+  localStorage.setItem(CUSTOM_PROGS_KEY,JSON.stringify(customProgs));
+}
+
+// ── Builder open/close ──
+let progBuilderOpen=false;
+function toggleProgBuilder(){
+  progBuilderOpen=!progBuilderOpen;
+  document.getElementById('progBuilderBody').style.display=progBuilderOpen?'block':'none';
+  document.getElementById('progBuilderArrow').textContent=progBuilderOpen?'▲':'▼';
+  if(progBuilderOpen)renderCustomProgList();
+}
+
+function renderCustomProgList(){
+  const el=document.getElementById('customProgList');
+  if(customProgs.length===0){el.innerHTML='<div class="empty" style="padding:12px 0">Ingen egne programmer ennå.</div>';return;}
+  el.innerHTML=customProgs.map((p,i)=>`
+    <div class="custom-prog-item" onclick="selectCustomProg(${i})">
+      <div>
+        <div class="cpi-name">${p.name}</div>
+        <div class="cpi-meta">${p.days.length} dager · ${p.days.reduce((s,d)=>s+(d.exercises||[]).length,0)} øvelser totalt</div>
+      </div>
+      <div class="cpi-actions">
+        <button class="btn-icon" onclick="event.stopPropagation();editCustomProg(${i})" title="Rediger" style="font-size:14px">✏️</button>
+        <button class="btn-icon" onclick="event.stopPropagation();deleteCustomProg(${i})" style="font-size:13px;color:var(--t3)">✕</button>
+      </div>
+    </div>`).join('');
+}
+
+function selectCustomProg(pi){
+  const prog=customProgs[pi];
+  // Render day sessions for this custom program
+  const gymSessEl=document.getElementById('gymSess');
+  gymSessEl.innerHTML=`<div class="sess-grid" style="grid-template-columns:repeat(${Math.min(prog.days.length,3)},1fr)">${
+    prog.days.map((day,di)=>`
+      <div class="sess-card gym-card" onclick="selectCustomDay(${pi},${di})" id="sess-cust-${pi}-${di}">
+        <div class="sess-lbl" style="font-size:14px">${day.name||'Dag '+(di+1)}</div>
+        <div class="sess-sub">${(day.exercises||[]).length} øvelser</div>
+      </div>`).join('')
+  }</div>`;
+  // Switch to gym tab visually
+  document.getElementById('ptog-gym').classList.add('active');
+  document.getElementById('gymSess').style.display='block';
+  document.getElementById('kbSess').style.display='none';
+}
+
+function selectCustomDay(pi,di){
+  const prog=customProgs[pi];
+  const day=prog.days[di];
+  // Build activeExercises from custom day
+  selectedSess=`CUST_${pi}_${di}`;
+  document.querySelectorAll('.sess-card').forEach(c=>c.classList.remove('sel'));
+  const card=document.getElementById(`sess-cust-${pi}-${di}`);
+  if(card)card.classList.add('sel');
+  unlockAudio();
+
+  // Build active exercises
+  activeExercises=(day.exercises||[]).map(e=>{
+    const lib=LIBRARY[e.libKey];
+    if(!lib)return null;
+    const opt=lib.options[e.optIdx||0];
+    return{libKey:e.libKey,optIdx:e.optIdx||0,name:opt.name,bigLift:lib.bigLift,sets:e.sets||3,defaultKg:opt.defaultKg,defaultReps:opt.defaultReps,unit:'reps',note:''};
+  }).filter(Boolean);
+
+  // Render as gym session
+  document.getElementById('activeType').textContent='🏋️ '+prog.name;
+  document.getElementById('activeName').textContent=day.name||'Dag '+(di+1);
+  document.getElementById('coreSection').style.display='block';
+  document.getElementById('activeSection').style.display='block';
+  renderExercises();
+  renderCoreExercises();
+  updateVolBadge();
+
+  // Check draft
+  const draft=loadDraft();
+  if(draft&&draft.session===selectedSess)restoreDraft(draft);
+  document.getElementById('activeSection').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+// Patch saveWorkout to handle custom sessions
+const _origSaveWorkout=saveWorkout;
+// (handled inline in saveWorkout by checking selectedSess prefix)
+
+// ── Wizard ──
+function startNewProg(){
+  editingProgIdx=null;
+  document.getElementById('wizProgName').value='';
+  wizDayExercises={};
+  setDayCount(3);
+  document.getElementById('progWizard').style.display='block';
+  document.getElementById('progWizard').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function editCustomProg(pi){
+  editingProgIdx=pi;
+  const prog=customProgs[pi];
+  document.getElementById('wizProgName').value=prog.name;
+  wizDayExercises={};
+  prog.days.forEach((day,di)=>{wizDayExercises[di]=day.exercises||[];});
+  document.getElementById('progWizard').style.display='block';
+  setDayCount(prog.days.length);
+  // Restore day names
+  setTimeout(()=>{
+    prog.days.forEach((day,di)=>{
+      const el=document.getElementById(`wizDayName_${di}`);
+      if(el)el.value=day.name||'';
+    });
+  },50);
+  document.getElementById('progWizard').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function closeWizard(){
+  document.getElementById('progWizard').style.display='none';
+  editingProgIdx=null;
+}
+
+function setDayCount(n){
+  wizDayCount=n;
+  document.querySelectorAll('.sets-pill').forEach(b=>b.classList.remove('sel'));
+  document.querySelectorAll('.sets-pill').forEach(b=>{if(b.textContent==n)b.classList.add('sel');});
+  renderWizDays();
+}
+
+function renderWizDays(){
+  const con=document.getElementById('wizDaysContainer');
+  con.innerHTML=Array.from({length:wizDayCount},(_,di)=>{
+    const exs=wizDayExercises[di]||[];
+    const chips=exs.map((e,ei)=>{
+      const lib=LIBRARY[e.libKey];
+      const opt=lib?.options[e.optIdx||0];
+      return `<span class="ex-chip" onclick="removeWizEx(${di},${ei})">${opt?.name||'?'} <span class="remove">×</span></span>`;
+    }).join('');
+    return `<div class="day-builder">
+      <div class="day-builder-hdr">
+        <input type="text" id="wizDayName_${di}" placeholder="Dagsnavn (f.eks. Push)" style="font-size:13px;font-weight:700;background:transparent;border:none;outline:none;color:var(--text);width:140px">
+        <span style="font-size:11px;color:var(--t3)">${exs.length} øvelser</span>
+      </div>
+      <div id="wizChips_${di}" style="min-height:30px;margin-bottom:8px">${chips||'<span style="font-size:11px;color:var(--t3)">Ingen øvelser lagt til</span>'}</div>
+      <div class="step-label">Legg til øvelse</div>
+      <div style="margin-bottom:6px">
+        <select id="wizSets_${di}" style="font-size:13px;padding:6px 10px;width:auto">
+          <option value="3">3 sett</option>
+          <option value="4">4 sett</option>
+          <option value="2">2 sett</option>
+          <option value="5">5 sett</option>
+        </select>
+      </div>
+      <div class="lib-grid" id="libgrid_${di}">${renderLibGrid(di)}</div>
+    </div>`;
+  }).join('');
+}
+
+function addWizEx(di,libKey,optIdx){
+  if(!wizDayExercises[di])wizDayExercises[di]=[];
+  const sets=parseInt(document.getElementById(`wizSets_${di}`)?.value||3);
+  // Avoid duplicates
+  if(wizDayExercises[di].find(e=>e.libKey===libKey&&e.optIdx===optIdx)){showToast('Allerede lagt til');return;}
+  wizDayExercises[di].push({libKey,optIdx,sets});
+  renderWizDays();
+}
+
+function removeWizEx(di,ei){
+  wizDayExercises[di].splice(ei,1);
+  renderWizDays();
+}
+
+function saveCustomProg(){
+  const name=document.getElementById('wizProgName').value.trim();
+  if(!name){showToast('Gi programmet et navn');return;}
+  const days=Array.from({length:wizDayCount},(_,di)=>({
+    name:document.getElementById(`wizDayName_${di}`)?.value.trim()||('Dag '+(di+1)),
+    exercises:wizDayExercises[di]||[]
+  }));
+  const prog={name,days,createdAt:new Date().toISOString()};
+  if(editingProgIdx!==null){customProgs[editingProgIdx]=prog;}
+  else{customProgs.push(prog);}
+  saveCustomProgsLocal();
+  closeWizard();
+  renderCustomProgList();
+  showToast('✅ Program lagret: '+name);
+}
+
+function deleteCustomProg(pi){
+  if(!confirm('Slette "'+customProgs[pi].name+'"?'))return;
+  customProgs.splice(pi,1);
+  saveCustomProgsLocal();
+  renderCustomProgList();
+  // Reset gym sessions to default
+  document.getElementById('gymSess').innerHTML=`<div class="sess-grid gym">
+    <div class="sess-card gym-card" onclick="selectSess('GYM1')" id="sess-GYM1"><div class="sess-lbl">DAG 1</div><div class="sess-sub">Push &<br>Underkropp</div></div>
+    <div class="sess-card gym-card" onclick="selectSess('GYM2')" id="sess-GYM2"><div class="sess-lbl">DAG 2</div><div class="sess-sub">Pull &<br>Helkropp</div></div>
+  </div>`;
+}
+
+// Sorted library grid grouped by muscle group
+function renderLibGrid(di){
+  // Define display order for groups
+  const GROUP_ORDER=['Helkropp','Underkropp','Bakside lår','Bryst','Rygg','Skuldre','Skuldre/rygg','Triceps','Bicep'];
+  // Gather all exercises grouped
+  const groups={};
+  Object.entries(LIBRARY).forEach(([key,lib])=>{
+    const g=lib.group;
+    if(!groups[g])groups[g]=[];
+    lib.options.forEach((opt,oi)=>{
+      groups[g].push({key,oi,opt,bigLift:lib.bigLift});
+    });
+  });
+  // Render sorted groups
+  const sorted=[...GROUP_ORDER,...Object.keys(groups).filter(g=>!GROUP_ORDER.includes(g))];
+  return sorted.filter(g=>groups[g]).map(g=>`
+    <div style="grid-column:1/-1;font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:1px;padding:6px 0 2px;border-top:1px solid var(--border);margin-top:4px">${g}</div>
+    ${groups[g].map(({key,oi,opt,bigLift})=>`
+      <div class="lib-item" onclick="addWizEx(${di},'${key}',${oi})">
+        ${opt.name}${bigLift?' 🏆':''}<div class="li-group">${opt.defaultKg>0?opt.defaultKg+'kg × ':''} ${opt.defaultReps} reps</div>
+      </div>`).join('')}
+  `).join('');
+}
+
 </script>
 </body>
 </html>
