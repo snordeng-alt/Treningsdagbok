@@ -2231,11 +2231,15 @@ async function analyzeRuns(){
       redirect:'follow'
     });
     const raw=await res.text();
+    console.log('Apps Script raw response:', raw);
     let data;
-    try{ data=JSON.parse(raw); }catch(e){ throw new Error('Ugyldig svar: '+raw.slice(0,100)); }
+    try{ data=JSON.parse(raw); }catch(e){ throw new Error('Ugyldig svar: '+raw.slice(0,200)); }
+    console.log('Parsed data:', JSON.stringify(data));
     const text=data.text||'';
+    console.log('AI text:', text);
     const parts=text.split(/ANALYSE:|NESTE OKT:|NESTE ØKT:|DETALJER:/).map(s=>s.trim()).filter(Boolean);
-    const analyse=parts[0]||'Ingen analyse tilgjengelig';
+    console.log('Parts:', parts);
+    const analyse=parts[0]||('Rått svar: '+text.slice(0,200));
     const nesteType=parts[1]||'';
     const detaljer=parts[2]||'';
     const runCards=document.querySelectorAll('.run-card');
