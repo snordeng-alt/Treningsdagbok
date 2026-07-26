@@ -2223,16 +2223,17 @@ async function analyzeRuns(){
     const lines=runs.slice(0,5).map((r,i)=>'Tur '+(i+1)+': '+fmtDist(r.distance)+' '+fmtPace(r.average_speed)+' '+fmtTime(r.moving_time)+(r.average_heartrate?' '+Math.round(r.average_heartrate)+'bpm':''));
     const summary=lines.join(', ');
     const systemMsg='Du er en erfaren løpecoach som hjelper en 42 år gammel mann å komme i form. Svar alltid på norsk.';
-    const userMsg='Her er mine siste løpeturer: '+summary+'. Ukentlig volum: '+weekKm+' km ('+weekRuns.length+' økter). Gi en analyse på maks 3 setninger og anbefal neste økt. Bruk eksakt dette formatet: ANALYSE: [din analyse her] NESTE ØKT: [type økt] DETALJER: [distanse tempo og begrunnelse]';
-    const res=await fetch('https://api.anthropic.com/v1/messages',{
+    const userMsg='Her er mine siste løpeturer: '+summary+'. Ukentlig volum: '+weekKm+' km ('+weekRuns.length+' okter). Gi en analyse pa maks 3 setninger og anbefal neste okt. Bruk eksakt dette formatet: ANALYSE: [din analyse her] NESTE OKT: [type okt] DETALJER: [distanse tempo og begrunnelse]';
+    // Route through Google Apps Script proxy to avoid CORS
+    const res=await fetch(SHEETS_URL,{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:800,system:systemMsg,messages:[{role:'user',content:userMsg}]})
+      body:JSON.stringify({type:'ai_coach',prompt:userMsg,system:systemMsg}),
+      headers:{'Content-Type':'text/plain'}
     });
     const data=await res.json();
-    const text=data.content?.[0]?.text||'';
-    const parts=text.split(/ANALYSE:|NESTE ØKT:|DETALJER:/).map(s=>s.trim()).filter(Boolean);
-    const analyse=parts[0]||'';
+    const text=data.text||'';
+    const parts=text.split(/ANALYSE:|NESTE OKT:|NESTE ØKT:|DETALJER:/).map(s=>s.trim()).filter(Boolean);
+    const analyse=parts[0]||'Ingen analyse tilgjengelig';
     const nesteType=parts[1]||'';
     const detaljer=parts[2]||'';
     const runCards=document.querySelectorAll('.run-card');
@@ -2250,7 +2251,15 @@ async function analyzeRuns(){
       document.getElementById('nextRunDesc').textContent=detaljer;
     }
     showToast('Analyse klar!');
-  }catch(e){showToast('Analyse feilet');console.error(e);}
+  }catch(e){
+    console.error('Analyse feil:', e);
+    console.error('Feilmelding:', e.message);
+    console.error('Stack:', e.stack);
+    showToast('Feil: '+e.message);
+    document.getElementById('nextRunCard').style.display='block';
+    document.getElementById('nextRunType').textContent='Feil oppstod';
+    document.getElementById('nextRunDesc').textContent=e.message||'Ukjent feil – sjekk konsollen';
+  }
   btn.disabled=false;
   btn.innerHTML='🔄 Analyser på nytt';
 }
