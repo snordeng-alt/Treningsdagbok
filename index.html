@@ -816,6 +816,7 @@ const DEFAULT_SESSIONS = {
 // STATE
 // ════════════════════════════════════════════════════════════
 const SHEETS_URL='https://script.google.com/macros/s/AKfycbyjfQ6VVdi0sAvBuTlycpNgu3HwgwzdrM1PZB4i66pwD5a5Ey7L4nuXp3c0TlcmLpYMrA/exec';
+const AI_COACH_URL='https://script.google.com/macros/s/AKfycbxMkLtS6e1MHOhbM7lSQ2m9udZW74-c9treBWoaPNE4WwuTP1lezfJla_22t5ckMbnNew/exec';
 const DRAFT_KEY='tdagbok_draft';
 const TIMER_KEY='tdagbok_timer';
 
@@ -2224,9 +2225,9 @@ async function analyzeRuns(){
     const summary=lines.join(', ');
     const systemMsg='Du er en erfaren løpecoach som hjelper en 42 år gammel mann å komme i form. Svar alltid på norsk.';
     const userMsg='Her er mine siste løpeturer: '+summary+'. Ukentlig volum: '+weekKm+' km ('+weekRuns.length+' okter). Gi en analyse pa maks 3 setninger og anbefal neste okt. Bruk eksakt dette formatet: ANALYSE: [din analyse her] NESTE OKT: [type okt] DETALJER: [distanse tempo og begrunnelse]';
-    // Route through Google Apps Script proxy via GET to avoid CORS/redirect issues
+    // Route through dedicated AI coach Apps Script to avoid CORS issues
     const payload=encodeURIComponent(JSON.stringify({type:'ai_coach',prompt:userMsg,system:systemMsg}));
-    const res=await fetch(SHEETS_URL+'?action=ai_coach&payload='+payload,{
+    const res=await fetch(AI_COACH_URL+'?action=ai_coach&payload='+payload,{
       method:'GET',
       redirect:'follow'
     });
