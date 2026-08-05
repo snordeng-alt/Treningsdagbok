@@ -36,10 +36,9 @@ header{background:var(--s1);border-bottom:1px solid var(--border);padding:14px 1
 .hdr-logo{font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:900;letter-spacing:1px;color:var(--text);}
 .hdr-logo span{color:var(--blue);}
 #syncStatus{margin-left:auto;font-size:11px;color:var(--t3);}
-.nav{display:flex;gap:2px;background:var(--bg);border-radius:10px 10px 0 0;padding:3px 3px 0;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
-.nav::-webkit-scrollbar{display:none;}
-.nav-btn{flex:0 0 auto;min-width:56px;padding:8px 8px 9px;border:none;border-radius:8px 8px 0 0;background:transparent;color:var(--t3);font-family:'Inter',sans-serif;font-size:11px;font-weight:500;cursor:pointer;transition:all .2s;display:flex;flex-direction:column;align-items:center;gap:2px;}
-.nav-btn .ni{font-size:16px;}
+.nav{display:flex;gap:0;background:var(--bg);border-radius:10px 10px 0 0;padding:3px 3px 0;width:100%;}
+.nav-btn{flex:1 1 0;min-width:0;padding:8px 2px 9px;border:none;border-radius:8px 8px 0 0;background:transparent;color:var(--t3);font-family:'Inter',sans-serif;font-size:10px;font-weight:500;cursor:pointer;transition:all .2s;display:flex;flex-direction:column;align-items:center;gap:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.nav-btn .ni{font-size:18px;}
 .nav-btn.active{background:var(--s2);color:var(--text);}
 
 /* ── LAYOUT ── */
@@ -2175,26 +2174,62 @@ function fmtPace(metersPerSec){
 function fmtDist(m){ return (m/1000).toFixed(2)+' km'; }
 function fmtTime(s){ const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sc=s%60; return h>0?h+'t '+m+'m':m+'m '+sc+'s'; }
 function fmtEle(m){ return m?Math.round(m)+'m':'–'; }
+function fmtGAP(metersPerSec){ return metersPerSec&&metersPerSec>0?fmtPace(metersPerSec):'–'; }
+function fmtCadence(c){ return c?Math.round(c*2)+' spm':'–'; }
+function getWorkoutType(t){ const types={0:'Vanlig løp',1:'Løp',2:'Langtur',3:'Intervall',4:'Terskel',10:'Gange'};return types[t]||'Løpetur'; }
+function daysSince(dateStr){ return Math.floor((Date.now()-new Date(dateStr+'T12:00:00'))/86400000); }
+
+function buildRunSummary(r){
+  // Build rich data summary for AI coaching
+  const gap=r.average_grade_adjusted_speed?fmtGAP(r.average_grade_adjusted_speed):'';
+  const hr=r.average_heartrate?Math.round(r.average_heartrate)+'bpm':'';
+  const maxHr=r.max_heartrate?Math.round(r.max_heartrate)+'bpm maks':'';
+  const cad=r.average_cadence?fmtCadence(r.average_cadence):'';
+  const suffer=r.suffer_score?'belastning '+r.suffer_score:'';
+  const wType=getWorkoutType(r.workout_type);
+  const ele=r.total_elevation_gain?Math.round(r.total_elevation_gain)+'m stigning':'';
+  const parts=[
+    fmtDist(r.distance),
+    'tempo '+fmtPace(r.average_speed),
+    gap?'GAP '+gap:'',
+    fmtTime(r.moving_time),
+    ele,
+    hr,maxHr,cad,suffer,wType
+  ].filter(Boolean);
+  return fmtDate(r.start_date_local?.split('T')[0]||'')+': '+parts.join(', ');
+}
 
 function renderRunList(runs){
   const el=document.getElementById('runList');
   if(!runs||runs.length===0){el.innerHTML='<div class="empty">Ingen løpeturer funnet.</div>';return;}
-  el.innerHTML=runs.map(r=>`
-    <div class="run-card">
-      <div class="run-card-hdr">
-        <div>
-          <div class="run-title">${r.name||'Løpetur'}</div>
-          <div class="run-date">${fmtDate(r.start_date_local?.split('T')[0]||'')}</div>
-        </div>
-        ${r.average_heartrate?`<div style="font-size:12px;color:var(--red);font-weight:600">❤️ ${Math.round(r.average_heartrate)} bpm</div>`:''}
-      </div>
-      <div class="run-stats">
-        <div class="run-stat"><div class="run-stat-val">${fmtDist(r.distance)}</div><div class="run-stat-lbl">Distanse</div></div>
-        <div class="run-stat"><div class="run-stat-val">${fmtPace(r.average_speed)}</div><div class="run-stat-lbl">Tempo</div></div>
-        <div class="run-stat"><div class="run-stat-val">${fmtTime(r.moving_time)}</div><div class="run-stat-lbl">Tid</div></div>
-        <div class="run-stat"><div class="run-stat-val">${fmtEle(r.total_elevation_gain)}</div><div class="run-stat-lbl">Stigning</div></div>
-      </div>
-    </div>`).join('');
+  el.innerHTML=runs.map(r=>{
+    const hasGAP=r.average_grade_adjusted_speed&&r.average_grade_adjusted_speed>0;
+    const gapDiff=hasGAP?Math.round((1/r.average_grade_adjusted_speed-1/r.average_speed)*1000*60):0;
+    const gapLabel=hasGAP?'GAP':'Tempo';
+    const gapVal=hasGAP?fmtGAP(r.average_grade_adjusted_speed):fmtPace(r.average_speed);
+    return '<div class="run-card">'+
+      '<div class="run-card-hdr">'+
+        '<div>'+
+          '<div class="run-title">'+(r.name||'Løpetur')+'</div>'+
+          '<div class="run-date">'+fmtDate(r.start_date_local?.split('T')[0]||'')+
+            (r.workout_type?' · '+getWorkoutType(r.workout_type):'')+'</div>'+
+        '</div>'+
+        (r.average_heartrate?'<div style="font-size:12px;color:var(--red);font-weight:600">❤️ '+Math.round(r.average_heartrate)+' bpm'+(r.max_heartrate?' / '+Math.round(r.max_heartrate):'')+'</div>':'')+
+      '</div>'+
+      '<div class="run-stats">'+
+        '<div class="run-stat"><div class="run-stat-val">'+fmtDist(r.distance)+'</div><div class="run-stat-lbl">Distanse</div></div>'+
+        '<div class="run-stat"><div class="run-stat-val">'+gapVal+'</div><div class="run-stat-lbl">'+gapLabel+'</div></div>'+
+        '<div class="run-stat"><div class="run-stat-val">'+fmtTime(r.moving_time)+'</div><div class="run-stat-lbl">Tid</div></div>'+
+        '<div class="run-stat"><div class="run-stat-val">'+fmtEle(r.total_elevation_gain)+'</div><div class="run-stat-lbl">Stigning</div></div>'+
+      '</div>'+
+      (r.average_cadence||r.suffer_score?
+        '<div style="display:flex;gap:12px;padding:6px 0 2px;font-size:11px;color:var(--t3)">'+
+          (r.average_cadence?'<span>👟 '+fmtCadence(r.average_cadence)+'</span>':'')+
+          (r.suffer_score?'<span>💢 Belastning: '+r.suffer_score+'</span>':'')+
+          (hasGAP&&gapDiff?'<span style="color:var(--blue)">↗ Tempo '+fmtPace(r.average_speed)+' (GAP '+gapVal+')</span>':'')+
+        '</div>':'')+
+    '</div>';
+  }).join('');
   // Week summary
   const now=new Date();
   const weekAgo=new Date(now);weekAgo.setDate(weekAgo.getDate()-7);
@@ -2219,12 +2254,33 @@ async function analyzeRuns(){
     if(runs.length===0){showToast('Ingen løpeturer å analysere');btn.disabled=false;btn.innerHTML='🤖 Analyser og gi coaching-råd';return;}
     const now=new Date();
     const weekAgo=new Date(now);weekAgo.setDate(weekAgo.getDate()-7);
+    const twoWeeksAgo=new Date(now);twoWeeksAgo.setDate(twoWeeksAgo.getDate()-14);
     const weekRuns=runs.filter(r=>new Date(r.start_date_local)>=weekAgo);
+    const prevWeekRuns=runs.filter(r=>new Date(r.start_date_local)>=twoWeeksAgo&&new Date(r.start_date_local)<weekAgo);
     const weekKm=(weekRuns.reduce((s,r)=>s+r.distance,0)/1000).toFixed(1);
-    const lines=runs.slice(0,5).map((r,i)=>'Tur '+(i+1)+': '+fmtDist(r.distance)+' '+fmtPace(r.average_speed)+' '+fmtTime(r.moving_time)+(r.average_heartrate?' '+Math.round(r.average_heartrate)+'bpm':''));
-    const summary=lines.join(', ');
-    const systemMsg='Du er en erfaren løpecoach som hjelper en 42 år gammel mann å komme i form. Svar alltid på norsk.';
-    const userMsg='Her er mine siste løpeturer: '+summary+'. Ukentlig volum: '+weekKm+' km ('+weekRuns.length+' okter). Gi en analyse pa maks 3 setninger og anbefal neste okt. Bruk eksakt dette formatet: ANALYSE: [din analyse her] NESTE OKT: [type okt] DETALJER: [distanse tempo og begrunnelse]';
+    const prevWeekKm=(prevWeekRuns.reduce((s,r)=>s+r.distance,0)/1000).toFixed(1);
+    const volChange=prevWeekKm>0?(((weekKm-prevWeekKm)/prevWeekKm)*100).toFixed(0):'ukjent';
+    const daysSinceLast=runs.length>0?daysSince(runs[0].start_date_local.split('T')[0]):99;
+    const totalSufferWeek=weekRuns.reduce((s,r)=>s+(r.suffer_score||0),0);
+    const runSummaries=runs.slice(0,8).map(r=>buildRunSummary(r));
+    const summary=runSummaries.join(' | ');
+    const systemMsg='Du er en erfaren løpecoach. Du følger disse prinsippene strengt: '+
+      '1) Ikke øk ukentlig kilometervolum med mer enn 10% fra uke til uke. '+
+      '2) Følg 80/20-regelen: 80% rolig (puls under 140), maks 20% hardøkter. '+
+      '3) GAP (Grade Adjusted Pace) brukes fremfor vanlig tempo ved bakkeløping. '+
+      '4) Legg alltid inn minimum én hvildag mellom hardøkter. '+
+      '5) Hvis belastningsscore (suffer score) er høy denne uken, anbefal lettere uke. '+
+      '6) Ta hensyn til kadense – under 160 spm tyder på ineffektiv løpsstil. '+
+      '7) Bygg gradvis base (minst 4 uker rolig løping) før du introduserer intervaller. '+
+      'Svar alltid på norsk og vær konkret med distanse og GAP-basert tempo.';
+    const userMsg='Profil: 42 år gammel mann som bygger løpeform. '+
+      'Siste '+runs.slice(0,8).length+' løpeturer: '+summary+'. '+
+      'Denne uken: '+weekKm+' km ('+weekRuns.length+' okter, total belastning '+totalSufferWeek+'). '+
+      'Forrige uke: '+prevWeekKm+' km. '+
+      'Volumendring: '+volChange+'%. '+
+      'Dager siden siste løpetur: '+daysSinceLast+'. '+
+      'Gi en analyse pa maks 3 setninger og anbefal neste okt med GAP-basert tempo. '+
+      'Bruk eksakt dette formatet: ANALYSE: [analyse] NESTE OKT: [type] DETALJER: [distanse GAP-tempo og begrunnelse]';
     // Route through dedicated AI coach Apps Script to avoid CORS issues
     const payload=encodeURIComponent(JSON.stringify({type:'ai_coach',prompt:userMsg,system:systemMsg}));
     const res=await fetch(AI_COACH_URL+'?action=ai_coach&payload='+payload,{
